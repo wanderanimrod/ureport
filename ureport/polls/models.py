@@ -35,7 +35,7 @@ class Poll(SmartModel):
     A poll represents a single Flow that has been brought in for
     display and sharing in the UReport platform.
     """
-    flow_id = models.IntegerField(help_text=_("The Flow this Poll is based on"))
+    flow_uuid = models.CharField(max_length=36, help_text=_("The Flow this Poll is based on"))
     title = models.CharField(max_length=255,
                              help_text=_("The title for this Poll"))
     category = models.ForeignKey(Category, related_name="polls",
@@ -44,7 +44,7 @@ class Poll(SmartModel):
                                       help_text=_("Whether this poll should be featured on the homepage"))
     category_image = models.ForeignKey(CategoryImage, null=True,
                                        help_text=_("The splash category image to display for the poll (optional)"))
-    org = models.ForeignKey(Org,
+    org = models.ForeignKey(Org, related_name="polls",
                             help_text=_("The organization this poll is part of"))
 
     @classmethod
@@ -91,21 +91,21 @@ class Poll(SmartModel):
         """
         Returns the underlying flow for this poll
         """
-        api = self.org.get_api()
-        return api.get_flow(self.flow_id)
+        temba_client = self.org.get_temba_client()
+        return temba_client.get_flow(self.flow_uuid)
 
     def best_and_worst(self):
         b_and_w = []
 
         # get our first question
-        question = self.questions.order_by('ruleset_id').first()
+        question = self.questions.order_by('ruleset_uuid').first()
         if question:
             # do we already have a cached set
-            b_and_w = cache.get('b_and_d:%d' % question.ruleset_id, [])
+            b_and_w = cache.get('b_and_d:%s' % question.ruleset_uuid, [])
 
             if not b_and_w:
-                api = self.org.get_api()
-                boundary_results = api.get_ruleset_results(question.ruleset_id, segment=dict(location='State'))
+                temba_client = self.org.get_temba_client()
+                boundary_results = temba_client.get_flow_results(question.ruleset_uuid, segment=dict(location='State'))
                 if not boundary_results:
                     return []
 
@@ -129,7 +129,7 @@ class Poll(SmartModel):
                 if b_and_w and b_and_w[0]['responded'] == 0:
                     b_and_w = []
 
-                cache.set('b_and_w:%d' % question.ruleset_id, b_and_w, 900)
+                cache.set('b_and_w:%s' % question.ruleset_uuid, b_and_w, 900)
 
         return b_and_w
 
@@ -138,8 +138,8 @@ class Poll(SmartModel):
         The response rate for this flow
         """
         flow = self.get_flow()
-        if flow and flow['completed_runs']:
-            return int(round((flow['completed_runs'] * 100.0) / flow['runs']))
+        if flow and flow.completed_runs:
+            return int(round((flow.completed_runs * 100.0) / flow.runs))
         else:
             return '--'
 
@@ -190,13 +190,13 @@ class Poll(SmartModel):
     def runs(self):
         flow = self.get_flow()
         if flow:
-            return flow['runs']
+            return flow.runs
         return "--"
 
     def completed_runs(self):
         flow = self.get_flow()
         if flow:
-            return flow['completed_runs']
+            return flow.completed_runs
         return "--"
 
     def get_featured_images(self):
@@ -253,11 +253,11 @@ class PollQuestion(SmartModel):
                              help_text=_("The poll this question is part of"))
     title = models.CharField(max_length=255,
                              help_text=_("The title of this question"))
-    ruleset_id = models.IntegerField(help_text=_("The RuleSet this question is based on"))
+    ruleset_uuid = models.CharField(max_length=36, help_text=_("The RuleSet this question is based on"))
 
     def get_results(self, segment=None):
-        api = self.poll.org.get_api()
-        return api.get_ruleset_results(self.ruleset_id, segment=segment)
+        temba_client = self.poll.org.get_temba_client()
+        return temba_client.get_flow_results(self.ruleset_uuid, segment=segment)
 
     def get_results_dict_data(self):
         if self.get_results():
