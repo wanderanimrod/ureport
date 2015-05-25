@@ -24,7 +24,12 @@ Sync the database, add all our models and create our superuser
 ```
 % python manage.py syncdb
 % python manage.py migrate
-% python manage createsuper
+% python manage.py createsuper
+```
+
+Ensure you have lessc on your path. If you don't you can install it with [npm](https://www.npmjs.com/)
+```
+npm install -g less
 ```
 
 At this point everything should be good to go, you can start with:
